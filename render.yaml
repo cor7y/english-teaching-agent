@@ -2,11 +2,13 @@ services:
   - type: web
     name: eta
     runtime: python
-    buildCommand: pip install anthropic
-    startCommand: python server.py
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: .venv/bin/python server.py
     envVars:
       - key: HOST
         value: 0.0.0.0
+      - key: PYTHONUNBUFFERED
+        value: "1"
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: ACCESS_TOKEN
