@@ -1,6 +1,6 @@
 # ETA — English Teaching Agent
 
-**交互原型：[https://eta.onrender.com](https://eta.onrender.com)**  ← 部署后替换此链接
+**交互原型：[https://english-teaching-agent.onrender.com](https://english-teaching-agent.onrender.com)**
 
 > 本地运行见下方"运行"章节
 
