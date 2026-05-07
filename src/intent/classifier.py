@@ -52,12 +52,18 @@ def classify_intent(
 
     response = client.messages.create(
         model=model,
-        max_tokens=256,
+        max_tokens=1024,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_input}],
     )
 
-    raw = response.content[0].text.strip()
+    thinking_block = next((b for b in response.content if b.type == "thinking"), None)
+    thinking_text = thinking_block.thinking if thinking_block else None
+
+    text_block = next((b for b in response.content if b.type == "text"), None)
+    if text_block is None:
+        raise ValueError(f"No text block in response: {[(b.type, type(b).__name__) for b in response.content]}")
+    raw = text_block.text.strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
@@ -74,4 +80,5 @@ def classify_intent(
         level=ProficiencyLevel(data["level"]),
         confidence=float(data["confidence"]),
         reasoning=data["reasoning"],
+        thinking=thinking_text,
     )

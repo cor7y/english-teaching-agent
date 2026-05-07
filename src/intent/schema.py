@@ -75,3 +75,4 @@ class IntentResult:
     level: ProficiencyLevel
     confidence: float
     reasoning: str
+    thinking: str | None = None

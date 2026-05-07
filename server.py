@@ -63,6 +63,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "level_label": LEVEL_LABELS.get(result.level.value, result.level.value),
                     "confidence": result.confidence,
                     "reasoning": result.reasoning,
+                    "thinking": result.thinking,
                 }
                 append_history(record)
                 self._json_response(200, record)
