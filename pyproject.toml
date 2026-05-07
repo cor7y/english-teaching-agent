@@ -1,0 +1,15 @@
+[project]
+name = "eta"
+version = "0.1.0"
+description = "English Teaching Agent - 高中英语教学Agent"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.52.0",
+    "pytest>=8.0",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

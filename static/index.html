@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETA - 意图识别 PoC</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", "PingFang SC", sans-serif; background: #f5f5f7; color: #1d1d1f; min-height: 100vh; }
+
+  .container { max-width: 640px; margin: 0 auto; padding: 40px 20px; }
+
+  h1 { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 14px; color: #86868b; margin-bottom: 32px; }
+
+  .input-area { position: relative; margin-bottom: 24px; }
+  textarea {
+    width: 100%; height: 80px; padding: 14px 16px; border: 1px solid #d2d2d7; border-radius: 12px;
+    font-size: 16px; line-height: 1.5; resize: none; outline: none; background: #fff;
+    font-family: inherit;
+  }
+  textarea:focus { border-color: #0071e3; box-shadow: 0 0 0 3px rgba(0,113,227,0.15); }
+  textarea::placeholder { color: #acacac; }
+
+  .actions { display: flex; gap: 8px; align-items: center; }
+  button {
+    padding: 10px 20px; border: none; border-radius: 8px; font-size: 15px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-primary { background: #0071e3; color: #fff; }
+  .btn-primary:hover { background: #0077ed; }
+  .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: #0071e3; }
+  .btn-ghost:hover { background: rgba(0,113,227,0.06); }
+
+  .examples { margin-bottom: 32px; }
+  .examples-title { font-size: 13px; color: #86868b; margin-bottom: 8px; }
+  .example-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 6px 12px; background: #fff; border: 1px solid #e5e5e5; border-radius: 16px;
+    font-size: 13px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .chip:hover { border-color: #0071e3; color: #0071e3; }
+
+  .result-card {
+    background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    display: none; margin-top: 24px;
+  }
+  .result-card.visible { display: block; }
+
+  .result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .intent-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 10px; font-size: 18px; font-weight: 700;
+  }
+  .intent-badge.sm { width: 28px; height: 28px; font-size: 13px; border-radius: 7px; }
+  .intent-name { font-size: 18px; font-weight: 600; }
+  .confidence { font-size: 13px; color: #86868b; margin-left: auto; }
+
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .result-item { background: #f5f5f7; padding: 12px; border-radius: 10px; }
+  .result-label { font-size: 12px; color: #86868b; margin-bottom: 4px; }
+  .result-value { font-size: 15px; font-weight: 500; }
+
+  .reasoning { font-size: 14px; color: #6e6e73; line-height: 1.5; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+
+  .loading { text-align: center; padding: 40px; color: #86868b; display: none; }
+  .loading.visible { display: block; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #e5e5e5; border-top-color: #0071e3; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error { background: #fff0f0; color: #d70015; padding: 12px 16px; border-radius: 10px; font-size: 14px; display: none; margin-bottom: 16px; }
+  .error.visible { display: block; }
+
+  .history { margin-top: 32px; }
+  .history-title { font-size: 13px; color: #86868b; margin-bottom: 8px; }
+  .history-entry { margin-bottom: 6px; }
+  .history-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff;
+    border-radius: 10px; font-size: 14px; cursor: pointer; transition: background 0.15s;
+    user-select: none;
+  }
+  .history-row:hover { background: #f0f0f5; }
+  .history-entry.expanded .history-row { border-radius: 10px 10px 0 0; }
+  .history-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-domain { font-size: 12px; color: #86868b; flex-shrink: 0; }
+  .history-arrow { font-size: 12px; color: #acacac; transition: transform 0.2s; flex-shrink: 0; }
+  .history-entry.expanded .history-arrow { transform: rotate(90deg); }
+
+  .history-detail {
+    display: none; background: #fff; border-top: 1px solid #f0f0f0;
+    border-radius: 0 0 10px 10px; padding: 14px;
+  }
+  .history-entry.expanded .history-detail { display: block; }
+  .history-detail .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .history-detail .detail-item { background: #f5f5f7; padding: 8px 10px; border-radius: 8px; }
+  .history-detail .detail-label { font-size: 11px; color: #86868b; }
+  .history-detail .detail-value { font-size: 13px; font-weight: 500; }
+  .history-detail .detail-reasoning { font-size: 13px; color: #6e6e73; line-height: 1.4; }
+  .history-detail .detail-time { font-size: 11px; color: #acacac; margin-top: 8px; }
+
+  .intent-K { background: #e3f2fd; color: #1565c0; }
+  .intent-D { background: #fce4ec; color: #c62828; }
+  .intent-S { background: #fff3e0; color: #e65100; }
+  .intent-M { background: #e8f5e9; color: #2e7d32; }
+  .intent-P { background: #f3e5f5; color: #6a1b9a; }
+  .intent-E { background: #fce4ec; color: #ad1457; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ETA 意图识别</h1>
+  <p class="subtitle">输入学生的问题，查看意图分类结果</p>
+
+  <div class="examples">
+    <div class="examples-title">试试这些</div>
+    <div class="example-chips">
+      <span class="chip" onclick="tryExample(this)">定语从句怎么用</span>
+      <span class="chip" onclick="tryExample(this)">这个句子哪里错了：He have been to Beijing last year.</span>
+      <span class="chip" onclick="tryExample(this)">这道语法填空怎么做</span>
+      <span class="chip" onclick="tryExample(this)">怎么背单词更有效</span>
+      <span class="chip" onclick="tryExample(this)">给我出几道非谓语动词的题</span>
+      <span class="chip" onclick="tryExample(this)">英语太难了学不会</span>
+      <span class="chip" onclick="tryExample(this)">which和that有什么区别</span>
+      <span class="chip" onclick="tryExample(this)">我写了I am agree，为什么不对</span>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <textarea id="input" placeholder="输入学生的问题..." autofocus></textarea>
+  </div>
+  <div class="actions">
+    <button class="btn-primary" id="submit" onclick="classify()">识别意图</button>
+    <button class="btn-ghost" onclick="clearAll()">清空</button>
+  </div>
+
+  <div class="error" id="error"></div>
+  <div class="loading" id="loading"><span class="spinner"></span>正在识别...</div>
+
+  <div class="result-card" id="result">
+    <div class="result-header">
+      <div class="intent-badge" id="r-badge"></div>
+      <div class="intent-name" id="r-intent"></div>
+      <div class="confidence" id="r-conf"></div>
+    </div>
+    <div class="result-grid">
+      <div class="result-item">
+        <div class="result-label">知识维度</div>
+        <div class="result-value" id="r-domain"></div>
+      </div>
+      <div class="result-item">
+        <div class="result-label">能力层级</div>
+        <div class="result-value" id="r-level"></div>
+      </div>
+    </div>
+    <div class="reasoning" id="r-reasoning"></div>
+  </div>
+
+  <div class="history" id="history-section" style="display:none">
+    <div class="history-title">历史记录</div>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<script>
+const inputEl = document.getElementById('input');
+const submitBtn = document.getElementById('submit');
+const resultEl = document.getElementById('result');
+const loadingEl = document.getElementById('loading');
+const errorEl = document.getElementById('error');
+let history = [];
+
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); classify(); }
+});
+
+document.addEventListener('DOMContentLoaded', loadHistory);
+
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/history');
+    const data = await res.json();
+    if (data.records && data.records.length > 0) {
+      history = data.records.reverse();
+      renderHistory();
+    }
+  } catch (e) {}
+}
+
+function tryExample(el) {
+  inputEl.value = el.textContent;
+  classify();
+}
+
+async function classify() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  submitBtn.disabled = true;
+  resultEl.classList.remove('visible');
+  errorEl.classList.remove('visible');
+  loadingEl.classList.add('visible');
+
+  try {
+    const res = await fetch('/api/classify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: text }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || '请求失败');
+
+    document.getElementById('r-badge').textContent = data.intent;
+    document.getElementById('r-badge').className = 'intent-badge intent-' + data.intent;
+    document.getElementById('r-intent').textContent = data.intent_label;
+    document.getElementById('r-conf').textContent = Math.round(data.confidence * 100) + '% 置信度';
+    document.getElementById('r-domain').textContent = data.domain + ' ' + data.domain_label;
+    document.getElementById('r-level').textContent = data.level_label;
+    document.getElementById('r-reasoning').textContent = data.reasoning;
+
+    resultEl.classList.add('visible');
+    loadingEl.classList.remove('visible');
+
+    history.unshift(data);
+    renderHistory();
+  } catch (e) {
+    errorEl.textContent = e.message;
+    errorEl.classList.add('visible');
+    loadingEl.classList.remove('visible');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+function toggleDetail(idx) {
+  const el = document.getElementById('he-' + idx);
+  el.classList.toggle('expanded');
+}
+
+function formatTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function esc(s) {
+  const el = document.createElement('span');
+  el.textContent = s;
+  return el.innerHTML;
+}
+
+function renderHistory() {
+  if (history.length === 0) return;
+  document.getElementById('history-section').style.display = 'block';
+  const list = document.getElementById('history-list');
+  list.innerHTML = history.map((h, i) => `
+    <div class="history-entry" id="he-${i}">
+      <div class="history-row" onclick="toggleDetail(${i})">
+        <div class="intent-badge sm intent-${esc(h.intent)}">${esc(h.intent)}</div>
+        <div class="history-text">${esc(h.input || h.text || '')}</div>
+        <div class="history-domain">${esc(h.domain_label)}</div>
+        <div class="history-arrow">&#9654;</div>
+      </div>
+      <div class="history-detail">
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">意图</div>
+            <div class="detail-value">${esc(h.intent)} ${esc(h.intent_label)}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">置信度</div>
+            <div class="detail-value">${Math.round((h.confidence || 0) * 100)}%</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">知识维度</div>
+            <div class="detail-value">${esc(h.domain)} ${esc(h.domain_label)}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">能力层级</div>
+            <div class="detail-value">${esc(h.level_label)}</div>
+          </div>
+        </div>
+        <div class="detail-reasoning">${esc(h.reasoning || '')}</div>
+        ${h.timestamp ? `<div class="detail-time">${formatTime(h.timestamp)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function clearAll() {
+  inputEl.value = '';
+  resultEl.classList.remove('visible');
+  errorEl.classList.remove('visible');
+  inputEl.focus();
+}
+</script>
+</body>
+</html>
