@@ -163,6 +163,9 @@
 </div>
 
 <script>
+const ETA_TOKEN = '__ACCESS_TOKEN__';
+const authHeaders = ETA_TOKEN ? { 'Authorization': `Bearer ${ETA_TOKEN}` } : {};
+
 const inputEl = document.getElementById('input');
 const submitBtn = document.getElementById('submit');
 const resultEl = document.getElementById('result');
@@ -178,7 +181,7 @@ document.addEventListener('DOMContentLoaded', loadHistory);
 
 async function loadHistory() {
   try {
-    const res = await fetch('/api/history');
+    const res = await fetch('/api/history', { headers: authHeaders });
     const data = await res.json();
     if (data.records && data.records.length > 0) {
       history = data.records.reverse();
@@ -204,7 +207,7 @@ async function classify() {
   try {
     const res = await fetch('/api/classify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ input: text }),
     });
     const data = await res.json();

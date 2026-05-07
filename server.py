@@ -7,6 +7,15 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from src.intent import classify_intent
 
 HISTORY_FILE = os.path.join(os.path.dirname(__file__), "intent-history.jsonl")
+ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN", "")
+
+
+def _check_auth(handler) -> bool:
+    """Return True if request carries valid token, or no token is configured."""
+    if not ACCESS_TOKEN:
+        return True
+    auth = handler.headers.get("Authorization", "")
+    return auth == f"Bearer {ACCESS_TOKEN}"
 
 
 def append_history(record: dict):
@@ -29,6 +38,10 @@ def load_history() -> list[dict]:
 class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/api/classify":
+            if not _check_auth(self):
+                self._json_response(401, {"error": "Unauthorized"})
+                return
+
             length = int(self.headers["Content-Length"])
             body = json.loads(self.rfile.read(length))
             user_input = body.get("input", "").strip()
@@ -58,6 +71,9 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if self.path == "/api/history":
+            if not _check_auth(self):
+                self._json_response(401, {"error": "Unauthorized"})
+                return
             self._json_response(200, {"records": load_history()})
             return
 
@@ -65,16 +81,30 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/history":
+            if not _check_auth(self):
+                self._json_response(401, {"error": "Unauthorized"})
+                return
             self._json_response(200, {"records": load_history()})
             return
-        if self.path == "/" or self.path == "/index.html":
-            self.path = "/static/index.html"
-        elif self.path.startswith("/static/"):
-            pass
-        else:
-            self._json_response(404, {"error": "not found"})
+        if self.path in ("/", "/index.html"):
+            self._serve_index()
             return
-        super().do_GET()
+        if self.path.startswith("/static/"):
+            super().do_GET()
+            return
+        self._json_response(404, {"error": "not found"})
+
+    def _serve_index(self):
+        html_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+        with open(html_path, encoding="utf-8") as f:
+            content = f.read()
+        content = content.replace("__ACCESS_TOKEN__", ACCESS_TOKEN)
+        body = content.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _json_response(self, code: int, data: dict):
         body = json.dumps(data, ensure_ascii=False).encode()
@@ -83,6 +113,9 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        pass
 
 
 INTENT_LABELS = {
@@ -111,9 +144,13 @@ LEVEL_LABELS = {
 
 
 def main():
+    host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "8080"))
-    server = HTTPServer(("0.0.0.0", port), Handler)
-    print(f"ETA 原型启动: http://localhost:{port}")
+    server = HTTPServer((host, port), Handler)
+    if ACCESS_TOKEN:
+        print(f"ETA 原型启动: http://localhost:{port}  [token 保护已启用]")
+    else:
+        print(f"ETA 原型启动: http://localhost:{port}  [无 token，仅限本机访问]")
     print(f"历史记录文件: {HISTORY_FILE}")
     server.serve_forever()
 
