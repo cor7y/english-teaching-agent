@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: eta
+    runtime: python
+    buildCommand: pip install uv && uv sync --no-dev
+    startCommand: uv run python server.py
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ACCESS_TOKEN
+        sync: false
