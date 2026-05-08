@@ -32,6 +32,8 @@
   .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
   .btn-ghost { background: transparent; color: #0071e3; }
   .btn-ghost:hover { background: rgba(0,113,227,0.06); }
+  .btn-export { background: transparent; color: #86868b; font-size: 13px; padding: 0; font-weight: 400; }
+  .btn-export:hover { color: #1d1d1f; }
 
   .examples { margin-bottom: 32px; }
   .examples-title { font-size: 13px; color: #86868b; margin-bottom: 8px; }
@@ -48,19 +50,49 @@
   }
   .result-card.visible { display: block; }
 
-  .result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-  .intent-badge {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 40px; height: 40px; border-radius: 10px; font-size: 18px; font-weight: 700;
+  .scale-section { margin-bottom: 20px; }
+  .scale-label { font-size: 12px; color: #86868b; margin-bottom: 10px; }
+  .scale-track { display: flex; gap: 2px; }
+  .scale-stop {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    cursor: default; transition: all 0.25s;
   }
-  .intent-badge.sm { width: 28px; height: 28px; font-size: 13px; border-radius: 7px; }
-  .intent-name { font-size: 18px; font-weight: 600; }
-  .confidence { font-size: 13px; color: #86868b; margin-left: auto; }
+  .scale-bar {
+    width: 100%; height: 6px; border-radius: 3px; background: #e8e8ed;
+    transition: all 0.3s;
+  }
+  .scale-stop.active .scale-bar { height: 6px; }
+  .scale-text {
+    font-size: 11px; color: #acacac; font-weight: 500;
+    transition: all 0.25s; white-space: nowrap;
+  }
+  .scale-stop.active .scale-text { color: #1d1d1f; font-weight: 600; font-size: 12px; }
+
+  .scale-stop.active.intent-K .scale-bar { background: #1565c0; }
+  .scale-stop.active.intent-D .scale-bar { background: #c62828; }
+  .scale-stop.active.intent-S .scale-bar { background: #e65100; }
+  .scale-stop.active.intent-M .scale-bar { background: #2e7d32; }
+  .scale-stop.active.intent-P .scale-bar { background: #6a1b9a; }
+  .scale-stop.active.intent-E .scale-bar { background: #ad1457; }
+
+  .scale-stop.active.level .scale-bar { background: #0071e3; }
 
   .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
   .result-item { background: #f5f5f7; padding: 12px; border-radius: 10px; }
   .result-label { font-size: 12px; color: #86868b; margin-bottom: 4px; }
   .result-value { font-size: 15px; font-weight: 500; }
+
+  .scale-sm .scale-bar { height: 4px; border-radius: 2px; }
+  .scale-sm .scale-text { font-size: 10px; }
+  .scale-sm .scale-stop.active .scale-text { font-size: 11px; }
+  .scale-sm .scale-stop { gap: 4px; }
+  .scale-sm { gap: 1px; }
+
+  .intent-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 10px; font-size: 18px; font-weight: 700;
+  }
+  .intent-badge.sm { width: 28px; height: 28px; font-size: 13px; border-radius: 7px; }
 
   .reasoning { font-size: 14px; color: #6e6e73; line-height: 1.5; padding-top: 12px; border-top: 1px solid #f0f0f0; }
 
@@ -138,10 +170,13 @@
   <div class="loading" id="loading"><span class="spinner"></span>正在识别...</div>
 
   <div class="result-card" id="result">
-    <div class="result-header">
-      <div class="intent-badge" id="r-badge"></div>
-      <div class="intent-name" id="r-intent"></div>
-      <div class="confidence" id="r-conf"></div>
+    <div class="scale-section">
+      <div class="scale-label">意图类型</div>
+      <div class="scale-track" id="r-intent-scale"></div>
+    </div>
+    <div class="scale-section">
+      <div class="scale-label">能力层级</div>
+      <div class="scale-track" id="r-level-scale"></div>
     </div>
     <div class="result-grid">
       <div class="result-item">
@@ -149,15 +184,18 @@
         <div class="result-value" id="r-domain"></div>
       </div>
       <div class="result-item">
-        <div class="result-label">能力层级</div>
-        <div class="result-value" id="r-level"></div>
+        <div class="result-label">置信度</div>
+        <div class="result-value" id="r-conf"></div>
       </div>
     </div>
     <div class="reasoning" id="r-reasoning"></div>
   </div>
 
   <div class="history" id="history-section" style="display:none">
-    <div class="history-title">历史记录</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="history-title" style="margin-bottom:0">历史记录 <span id="history-count" style="color:#acacac;font-size:12px"></span></div>
+      <button class="btn-export" onclick="exportJSONL()">导出 JSONL</button>
+    </div>
     <div id="history-list"></div>
   </div>
 </div>
@@ -173,6 +211,26 @@ const loadingEl = document.getElementById('loading');
 const errorEl = document.getElementById('error');
 let history = [];
 
+const LS_KEY = 'eta_history';
+
+function lsLoad() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; }
+}
+
+function lsSave(records) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(records)); } catch {}
+}
+
+function mergeRecords(a, b) {
+  const seen = new Set();
+  return [...a, ...b].filter(r => {
+    const key = r.timestamp + '|' + r.input;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).sort((x, y) => (y.timestamp || '').localeCompare(x.timestamp || ''));
+}
+
 inputEl.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); classify(); }
 });
@@ -180,14 +238,28 @@ inputEl.addEventListener('keydown', e => {
 document.addEventListener('DOMContentLoaded', loadHistory);
 
 async function loadHistory() {
+  const local = lsLoad();
   try {
     const res = await fetch('/api/history', { headers: authHeaders });
     const data = await res.json();
-    if (data.records && data.records.length > 0) {
-      history = data.records.reverse();
-      renderHistory();
-    }
-  } catch (e) {}
+    const server = data.records || [];
+    history = mergeRecords(server, local);
+    lsSave(history);
+  } catch {
+    history = local;
+  }
+  if (history.length > 0) renderHistory();
+}
+
+function exportJSONL() {
+  const lines = history.map(r => JSON.stringify(r)).join('\n');
+  const blob = new Blob([lines], { type: 'application/x-ndjson' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'intent-history.jsonl';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function tryExample(el) {
@@ -214,18 +286,17 @@ async function classify() {
 
     if (!res.ok) throw new Error(data.error || '请求失败');
 
-    document.getElementById('r-badge').textContent = data.intent;
-    document.getElementById('r-badge').className = 'intent-badge intent-' + data.intent;
-    document.getElementById('r-intent').textContent = data.intent_label;
-    document.getElementById('r-conf').textContent = Math.round(data.confidence * 100) + '% 置信度';
-    document.getElementById('r-domain').textContent = data.domain + ' ' + data.domain_label;
-    document.getElementById('r-level').textContent = data.level_label;
+    renderIntentScale(data.intent);
+    renderLevelScale(data.level);
+    document.getElementById('r-domain').innerHTML = fmtDomain(data.domain, data.domain_label);
+    document.getElementById('r-conf').textContent = Math.round(data.confidence * 100) + '%';
     document.getElementById('r-reasoning').textContent = data.reasoning;
 
     resultEl.classList.add('visible');
     loadingEl.classList.remove('visible');
 
-    history.unshift(data);
+    history = mergeRecords([data], history);
+    lsSave(history);
     renderHistory();
   } catch (e) {
     errorEl.textContent = e.message;
@@ -257,6 +328,7 @@ function esc(s) {
 function renderHistory() {
   if (history.length === 0) return;
   document.getElementById('history-section').style.display = 'block';
+  document.getElementById('history-count').textContent = `(${history.length})`;
   const list = document.getElementById('history-list');
   list.innerHTML = history.map((h, i) => `
     <div class="history-entry" id="he-${i}">
@@ -267,22 +339,22 @@ function renderHistory() {
         <div class="history-arrow">&#9654;</div>
       </div>
       <div class="history-detail">
+        <div style="margin-bottom:10px">
+          <div class="detail-label" style="margin-bottom:6px">意图类型</div>
+          <div class="scale-track scale-sm">${renderIntentScaleHTML(h.intent)}</div>
+        </div>
+        <div style="margin-bottom:10px">
+          <div class="detail-label" style="margin-bottom:6px">能力层级</div>
+          <div class="scale-track scale-sm">${renderLevelScaleHTML(h.level)}</div>
+        </div>
         <div class="detail-grid">
           <div class="detail-item">
-            <div class="detail-label">意图</div>
-            <div class="detail-value">${esc(h.intent)} ${esc(h.intent_label)}</div>
+            <div class="detail-label">知识维度</div>
+            <div class="detail-value">${fmtDomain(h.domain, h.domain_label)}</div>
           </div>
           <div class="detail-item">
             <div class="detail-label">置信度</div>
             <div class="detail-value">${Math.round((h.confidence || 0) * 100)}%</div>
-          </div>
-          <div class="detail-item">
-            <div class="detail-label">知识维度</div>
-            <div class="detail-value">${esc(h.domain)} ${esc(h.domain_label)}</div>
-          </div>
-          <div class="detail-item">
-            <div class="detail-label">能力层级</div>
-            <div class="detail-value">${esc(h.level_label)}</div>
           </div>
         </div>
         <div class="detail-reasoning">${esc(h.reasoning || '')}</div>
@@ -290,6 +362,54 @@ function renderHistory() {
       </div>
     </div>
   `).join('');
+}
+
+const INTENTS = [
+  { key: 'K', label: '知识查询' },
+  { key: 'D', label: '错误诊断' },
+  { key: 'S', label: '解题求助' },
+  { key: 'M', label: '方法策略' },
+  { key: 'P', label: '练习请求' },
+  { key: 'E', label: '情感表达' },
+];
+const LEVELS = [
+  { key: 'L1', label: '识记' },
+  { key: 'L2', label: '理解' },
+  { key: 'L3', label: '应用' },
+  { key: 'L4', label: '分析' },
+];
+
+function renderIntentScaleHTML(active) {
+  return INTENTS.map(it => {
+    const on = it.key === active;
+    return `<div class="scale-stop${on ? ' active intent-' + it.key : ''}">
+      <div class="scale-bar"></div>
+      <div class="scale-text">${on ? it.key + ' ' + it.label : it.key}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderLevelScaleHTML(active) {
+  return LEVELS.map(lv => {
+    const on = lv.key === active;
+    return `<div class="scale-stop${on ? ' active level' : ''}">
+      <div class="scale-bar"></div>
+      <div class="scale-text">${lv.key} ${lv.label}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderIntentScale(active) {
+  document.getElementById('r-intent-scale').innerHTML = renderIntentScaleHTML(active);
+}
+
+function renderLevelScale(active) {
+  document.getElementById('r-level-scale').innerHTML = renderLevelScaleHTML(active);
+}
+
+function fmtDomain(domain, label) {
+  if (!domain || domain === 'unknown') return esc('未确定');
+  return esc(domain + ' ' + (label || ''));
 }
 
 function clearAll() {
